@@ -8,18 +8,15 @@ DAC8562::DAC8562(int sck, int miso, int mosi, int cs, uint32_t freq)
 
 void DAC8562::begin() {
     initSPI();
-    reset();
+    reset_all();
 }
 
-void DAC8562::reset() {
+void DAC8562::reset_all() {
     write24(DAC_RESET_ALL);
     write24(DAC_REFERENCE_ENABLE_G2);
     write24(DAC_GAIN_B2A2);
 }
 
-void DAC8562::writeData(uint32_t data) {
-    write24(data);
-}
 
 void DAC8562::write24(uint32_t data) {
     spi_transaction_t t;

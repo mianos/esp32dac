@@ -7,8 +7,7 @@ class DAC8562 {
 public:
     DAC8562(int sckPin = 25, int misoPin = 27, int mosiPin = 26, int csPin = 33, uint32_t frequency = 1000000);
     void begin();
-    void reset();
-    void writeData(uint32_t data);
+    void reset_all();
 
 private:
     int sckPin, misoPin, mosiPin, csPin;  // Pin assignments
@@ -19,6 +18,7 @@ private:
     void initSPI();
 
 
+public:
     // Constants
     static constexpr uint32_t DAC_RESET = 0x280000;
     static constexpr uint32_t DAC_RESET_ALL = DAC_RESET | 0x1;
@@ -44,5 +44,35 @@ private:
     static constexpr uint32_t DAC_POWER_UP_AB = DAC_POWER_UP | 0x3;
     static constexpr uint32_t DAC_LDAC_MODE = 0x300000;
     static constexpr uint32_t DAC_LDAC_INACTIVE_AB = DAC_LDAC_MODE | 0x3;
+
+    // Function to reset DAC
+    void reset(bool resetAll = false) {
+        write24(resetAll ? DAC_RESET_ALL : DAC_RESET_INPUT);
+    }
+
+    // Function to set reference
+    void setReference(bool enableGain2 = false) {
+        write24(enableGain2 ? DAC_REFERENCE_ENABLE_G2 : DAC_REFERENCE);
+    }
+
+    // Function to set gain
+    void setGain(bool gainB1A1 = false) {
+        write24(gainB1A1 ? DAC_GAIN_B1A1 : DAC_GAIN_B2A2);
+    }
+
+    // Function to write and update DAC channel A
+    void writeA(uint16_t value) {
+        write24(DAC_WRITE_A_UPDATE_A | (value & 0xFFFF));
+    }
+
+    // Function to write and update DAC channel B
+    void writeB(uint16_t value) {
+        write24(DAC_WRITE_B_UPDATE_B | (value & 0xFFFF));
+    }
+
+    // Function to update all channels
+    void updateAll() {
+        write24(DAC_UPDATE_ALL);
+    }
 };
 

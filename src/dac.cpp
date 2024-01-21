@@ -14,6 +14,13 @@ void DAC8562Mqtt::command_handler(String& dest, JsonDocument &jpl) {
         auto channel = jpl["channel"].as<int>();
         auto value = jpl["value"].as<int>();
         Serial.printf("setting %d to %d\n", channel, value);
+        if (channel == 0) {
+          dac->writeA(value);
+        } else if (channel == 1) {
+          dac->writeB(value);
+        } else {
+          Serial.printf("unsupported channel %d\n", channel);
+        }
       } else {
         Serial.printf("needs {\"channel\": N, \"value\": N}");
       }
