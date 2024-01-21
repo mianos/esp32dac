@@ -34,19 +34,18 @@ void setup() {
   }
   dac = std::make_unique<DAC8562Mqtt>(settings);
   mqtt = std::make_shared<MqttManagedDevices>(settings, std::move(dac));
-  mqtt->handle();
 }
 
-int ii;
+//int ii;
 
 void loop() {
   unsigned long currentMillis = millis();
   
+  mqtt->handle();
   if (currentMillis - lastInvokeTime >= dayMillis) {
       DateTime.begin(1000);
       lastInvokeTime = currentMillis;
   }
   ArduinoOTA.handle();
-  Serial.printf("%d\n", ii++);
-  delay(1000);
+  delay(1);
 }

@@ -64,7 +64,6 @@ MqttManagedDevices::MqttManagedDevices(std::shared_ptr<SettingsManager> settings
       client(espClient) {
     client.setBufferSize(MQTT_BUFFER_SIZE);
     client.setServer(settings->mqttServer.c_str(), settings->mqttPort);
-    Serial.printf("init mqtt, server '%s'\n", settings->mqttServer.c_str());
     client.setCallback([this](char* topic_str, byte* payload, unsigned int length) {
         callback(topic_str, payload, length);
     });
@@ -72,13 +71,9 @@ MqttManagedDevices::MqttManagedDevices(std::shared_ptr<SettingsManager> settings
 
 bool MqttManagedDevices::reconnect() {
     String clientId = WiFi.getHostname();
-    Serial.printf("Attempting MQTT connection... to %s name %s\n", settings->mqttServer.c_str(), clientId.c_str());
-      Serial.printf("mqtt name '%s'\n", settings->sensorName.c_str());
-    if (client.connect("hello")) {
-      Serial.printf("connected\n");
+    if (client.connect(clientId.c_str())) {
         delay(INITIAL_MQTT_CONNECT_DELAY_MS);
         String cmnd_topic = String("cmnd/") + settings->sensorName + "/#";
-        Serial.printf("mqtt topic '%s'\n", cmnd_topic.c_str());
         client.subscribe(cmnd_topic.c_str());
         Serial.printf("mqtt connected as sensor '%s'\n", settings->sensorName.c_str());
 
