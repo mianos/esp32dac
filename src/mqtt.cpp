@@ -17,10 +17,6 @@ void MqttManagedDevices::publish_error(const String& error) {
     client.publish(topic.c_str(), output.c_str());
 }
 
-void DAC8562Mqtt::command_handler(String& dest, JsonDocument &jpl) {
-    Serial.printf("local handler dest %s\n", dest.c_str());
-    // Implement specific command handling for DAC8562Mqtt
-}
 
 void MqttManagedDevices::callback(char* topic_str, byte* payload, unsigned int length) {
     String topic = String(topic_str);
@@ -55,16 +51,17 @@ void MqttManagedDevices::callback(char* topic_str, byte* payload, unsigned int l
             auto result = settings->loadFromDocument(jpl);
             // Implement specific settings update logic
         } else {
-            command_handler(dest, jpl);
+            device->command_handler(dest, jpl);
         }
     }
 }
 
-DAC8562Mqtt::DAC8562Mqtt(std::shared_ptr<SettingsManager> settings, std::unique_ptr<DAC8562> dac)
-    : MqttManagedDevices(std::move(settings)), dac(std::move(dac)) {
-}
 
-MqttManagedDevices::MqttManagedDevices(std::shared_ptr<SettingsManager> settings) : settings(std::move(settings)) {
+MqttManagedDevices::MqttManagedDevices(std::shared_ptr<SettingsManager> settings,
+                                       std::unique_ptr<Device> device)
+    : settings(settings),
+      device(std::move(device)),
+      client(espClient) {
     client.setBufferSize(MQTT_BUFFER_SIZE);
     client.setServer(settings->mqttServer.c_str(), settings->mqttPort);
     Serial.printf("init mqtt, server '%s'\n", settings->mqttServer.c_str());
@@ -76,14 +73,17 @@ MqttManagedDevices::MqttManagedDevices(std::shared_ptr<SettingsManager> settings
 bool MqttManagedDevices::reconnect() {
     String clientId = WiFi.getHostname();
     Serial.printf("Attempting MQTT connection... to %s name %s\n", settings->mqttServer.c_str(), clientId.c_str());
-    if (client.connect(clientId.c_str())) {
+      Serial.printf("mqtt name '%s'\n", settings->sensorName.c_str());
+    if (client.connect("hello")) {
+      Serial.printf("connected\n");
         delay(INITIAL_MQTT_CONNECT_DELAY_MS);
         String cmnd_topic = String("cmnd/") + settings->sensorName + "/#";
+        Serial.printf("mqtt topic '%s'\n", cmnd_topic.c_str());
         client.subscribe(cmnd_topic.c_str());
         Serial.printf("mqtt connected as sensor '%s'\n", settings->sensorName.c_str());
 
         JsonDocument doc;
-        doc["version"] = LOCAL_MQTT_VERSION;
+        doc["version"] = LOCAL_VERSION;
         doc["time"] = DateTime.toISOString();
         doc["hostname"] = WiFi.getHostname();
         doc["ip"] = WiFi.localIP().toString();
