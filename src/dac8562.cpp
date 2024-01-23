@@ -17,12 +17,14 @@ void DAC8562::reset_all() {
     write24(DAC_GAIN_B2A2);
 }
 
-
 void DAC8562::write24(uint32_t data) {
+    // Swap the byte order
+    uint32_t swappedData = ((data & 0xFF) << 16) | (data & 0xFF00) | ((data >> 16) & 0xFF);
+
     spi_transaction_t t;
     memset(&t, 0, sizeof(t));
-    t.length = 24;
-    t.tx_buffer = &data;
+    t.length = 24; // 24 bits
+    t.tx_buffer = &swappedData;
     spi_device_transmit(spi, &t);
 }
 
@@ -43,6 +45,7 @@ void DAC8562::initSPI() {
     spi_devcfg.input_delay_ns = 20; //?
     spi_devcfg.spics_io_num = csPin;
     spi_devcfg.queue_size = 7;
+
 
     // Initialize the SPI bus and add the device
     spi_bus_initialize(HSPI_HOST, &buscfg, 1);

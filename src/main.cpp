@@ -7,7 +7,7 @@
 
 #include "provision.h"
 #include "mqtt.h"
-#include "dac.h"
+#include "dac8562if.h"
 
 WiFiClient wifiClient;
 
