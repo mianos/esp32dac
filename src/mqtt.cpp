@@ -95,6 +95,13 @@ bool MqttManagedDevices::reconnect() {
     }
 }
 
+void MqttManagedDevices::wave() {
+  if (wcount == 100) {
+    wcount = 0;
+  }
+  device->simple_set(wcount++);
+}
+
 void MqttManagedDevices::handle() {
     if (!client.connected()) {
         if (!reconnect()) {

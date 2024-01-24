@@ -11,10 +11,12 @@ void MCP4921::begin() {
 }
 
 void MCP4921::write16(uint16_t data) {
+    uint16_t swappedData = (data >> 8) | (data << 8);
+
     spi_transaction_t t;
     memset(&t, 0, sizeof(t));
     t.length = 16;
-    t.tx_buffer = &data;
+    t.tx_buffer = &swappedData;
     spi_device_transmit(spi, &t);
 }
 

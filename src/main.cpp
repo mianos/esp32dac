@@ -7,13 +7,14 @@
 
 #include "provision.h"
 #include "mqtt.h"
-#include "dac8562if.h"
+#include "mcp4921if.h"
+//#include "dac8562if.h"
 
 WiFiClient wifiClient;
 
 std::shared_ptr<MqttManagedDevices> mqtt;
 std::shared_ptr<SettingsManager> settings;
-std::unique_ptr<DAC8562Mqtt> dac;
+std::unique_ptr<MCP4921Mqtt> dac;
 
 unsigned long lastInvokeTime = 0; // Store the last time you called the function
 const unsigned long dayMillis = 24UL * 60 * 60 * 1000; // Milliseconds in a day
@@ -32,7 +33,7 @@ void setup() {
   if (!DateTime.isTimeValid()) {
     Serial.printf("Failed to get time from server\n");
   }
-  dac = std::make_unique<DAC8562Mqtt>(settings);
+  dac = std::make_unique<MCP4921Mqtt>(settings);
   mqtt = std::make_shared<MqttManagedDevices>(settings, std::move(dac));
 }
 
@@ -42,10 +43,11 @@ void loop() {
   unsigned long currentMillis = millis();
   
   mqtt->handle();
+  mqtt->wave();
   if (currentMillis - lastInvokeTime >= dayMillis) {
       DateTime.begin(1000);
       lastInvokeTime = currentMillis;
   }
   ArduinoOTA.handle();
-  delay(1);
+ // delay(1);
 }

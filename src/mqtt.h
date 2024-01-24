@@ -8,6 +8,7 @@
 
 struct Device {
   virtual void command_handler(String& dest, JsonDocument &jpl) = 0;
+  virtual void simple_set(float value) = 0; // 0.0 to 100.0
 };
 
 struct MqttManagedDevices {
@@ -29,5 +30,8 @@ struct MqttManagedDevices {
     void publish_error(const String& error);
     bool reconnect();
     void handle();
+
+    int wcount = 0;
+    void wave();
 };
 

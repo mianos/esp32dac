@@ -17,13 +17,17 @@ private:
     void initSPI();
 
 public:
-    static constexpr uint32_t DAC_SELECT_A           = 0x80;
-    static constexpr uint32_t BUFFERED_OUTPUT        = 0x40;
-    static constexpr uint32_t UNBUFFERED_OUTPUT      = 0x00;
-    static constexpr uint32_t OUTPUT_GAIN_1X         = 0x20;
-    static constexpr uint32_t OUTPUT_GAIN_2X         = 0x00;
-    static constexpr uint32_t OUTPUT_ACTIVE          = 0x10;
-    static constexpr uint32_t OUTPUT_INACTIVE        = 0x00;
+public:
+    static constexpr uint16_t DAC_SELECT_B           = 0x8000;
+    static constexpr uint16_t DAC_SELECT_A           = 0x0000;
+    static constexpr uint16_t BUFFERED_VREF          = 0x4000;
+    static constexpr uint16_t UNBUFFERED_VREF        = 0x0000;
+    static constexpr uint16_t OUTPUT_GAIN_1X         = 0x2000;
+    static constexpr uint16_t OUTPUT_GAIN_2X         = 0x0000;
+    static constexpr uint16_t OUTPUT_ACTIVE          = 0x1000;
+    static constexpr uint16_t OUTPUT_INACTIVE        = 0x0000;
+
+    static constexpr uint16_t MAX_VALUE = 0x0FFF; // Maximum 12-bit value
 
 private:
     uint16_t currentGain = OUTPUT_GAIN_1X; // Default gain
@@ -40,7 +44,7 @@ public:
     }
 
     void writeA(uint16_t value) {
-        value &= 0x0FFF;
-        write16(DAC_SELECT_A | BUFFERED_OUTPUT | currentGain | OUTPUT_ACTIVE | value);
+        value &= MAX_VALUE; // Ensure the value is in the range of 0-4095
+        write16(DAC_SELECT_A | BUFFERED_VREF | currentGain | OUTPUT_ACTIVE | value);
     }
 };
