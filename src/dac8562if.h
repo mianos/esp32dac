@@ -12,4 +12,5 @@ struct DAC8562Mqtt : public Device {
     virtual ~DAC8562Mqtt() = default;
 
     void command_handler(String& dest, JsonDocument &jpl) override;
+    void simple_set(float value);
 };

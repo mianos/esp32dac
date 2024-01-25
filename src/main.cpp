@@ -7,14 +7,16 @@
 
 #include "provision.h"
 #include "mqtt.h"
+
 #include "mcp4921if.h"
-//#include "dac8562if.h"
+#include "dac8562if.h"
 
 WiFiClient wifiClient;
 
 std::shared_ptr<MqttManagedDevices> mqtt;
 std::shared_ptr<SettingsManager> settings;
-std::unique_ptr<MCP4921Mqtt> dac;
+// std::unique_ptr<MCP4921Mqtt> dac;
+// std::unique_ptr<DAC8562Mqtt> tidac;
 
 unsigned long lastInvokeTime = 0; // Store the last time you called the function
 const unsigned long dayMillis = 24UL * 60 * 60 * 1000; // Milliseconds in a day
@@ -33,7 +35,11 @@ void setup() {
   if (!DateTime.isTimeValid()) {
     Serial.printf("Failed to get time from server\n");
   }
-  dac = std::make_unique<MCP4921Mqtt>(settings);
+#if 0
+  auto dac = std::make_unique<MCP4921Mqtt>(settings);
+#else
+  auto dac = std::make_unique<DAC8562Mqtt>(settings);
+#endif
   mqtt = std::make_shared<MqttManagedDevices>(settings, std::move(dac));
 }
 

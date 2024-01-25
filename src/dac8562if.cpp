@@ -1,5 +1,9 @@
 #include "dac8562if.h"
 
+void DAC8562Mqtt::simple_set(float value) {
+  dac->writeA(static_cast<uint16_t>(value * DAC8562::MAX_VALUE / 100.0));
+}
+
 DAC8562Mqtt::DAC8562Mqtt(std::shared_ptr<SettingsManager> settings) : settings(settings) {
   Serial.printf("Dacmqtt made\n");
   dac = std::make_unique<DAC8562>();

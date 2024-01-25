@@ -45,6 +45,8 @@ public:
     static constexpr uint32_t DAC_LDAC_MODE = 0x300000;
     static constexpr uint32_t DAC_LDAC_INACTIVE_AB = DAC_LDAC_MODE | 0x3;
 
+    static constexpr uint16_t MAX_VALUE = 0x0FFF; // Maximum 12-bit value
+
     // Function to reset DAC
     void reset(bool resetAll = false) {
         write24(resetAll ? DAC_RESET_ALL : DAC_RESET_INPUT);
