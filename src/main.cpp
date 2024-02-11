@@ -10,6 +10,7 @@
 
 #include "mcp4921if.h"
 #include "dac8562if.h"
+#include "dac1220if.h"
 
 WiFiClient wifiClient;
 

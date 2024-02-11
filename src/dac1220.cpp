@@ -1,0 +1,53 @@
+#include "dac1220.h"
+#include "driver/spi_common.h"
+#include "driver/spi_master.h"
+
+DAC1220::DAC1220(int sck, int miso, int mosi, int cs, uint32_t freq)
+    : sckPin(sck), misoPin(miso), mosiPin(mosi), csPin(cs), frequency(freq) {
+}
+
+void DAC1220::begin() {
+    initSPI();
+    reset_all();
+}
+
+void DAC1220::reset_all() {
+//    write24(DAC_RESET_ALL);
+//    write24(DAC_REFERENCE_ENABLE_G2);
+ //   write24(DAC_GAIN_B2A2);
+}
+
+void DAC1220::write24(uint32_t data) {
+    // Swap the byte order
+    uint32_t swappedData = ((data & 0xFF) << 16) | (data & 0xFF00) | ((data >> 16) & 0xFF);
+
+    spi_transaction_t t;
+    memset(&t, 0, sizeof(t));
+    t.length = 24; // 24 bits
+    t.tx_buffer = &swappedData;
+    spi_device_transmit(spi, &t);
+}
+
+void DAC1220::initSPI() {
+    spi_bus_config_t buscfg = {
+        .mosi_io_num = mosiPin,
+        .miso_io_num = misoPin,
+        .sclk_io_num = sckPin,
+        .quadwp_io_num = -1,
+        .quadhd_io_num = -1
+    };
+
+
+    spi_device_interface_config_t spi_devcfg;
+    memset(&spi_devcfg, 0, sizeof(spi_device_interface_config_t));
+    spi_devcfg.mode = 0;
+    spi_devcfg.clock_speed_hz = static_cast<int>(frequency);
+    spi_devcfg.input_delay_ns = 20; //?
+    spi_devcfg.spics_io_num = csPin;
+    spi_devcfg.queue_size = 7;
+
+
+    // Initialize the SPI bus and add the device
+    spi_bus_initialize(HSPI_HOST, &buscfg, 1);
+    spi_bus_add_device(HSPI_HOST, &spi_devcfg, &spi);
+}
