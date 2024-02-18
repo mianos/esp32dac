@@ -38,8 +38,9 @@ void setup() {
   }
 #if 0
   auto dac = std::make_unique<MCP4921Mqtt>(settings);
-#else
   auto dac = std::make_unique<DAC8562Mqtt>(settings);
+#else
+  auto dac = std::make_unique<DAC1220Mqtt>(settings);
 #endif
   mqtt = std::make_shared<MqttManagedDevices>(settings, std::move(dac));
 }
@@ -50,11 +51,11 @@ void loop() {
   unsigned long currentMillis = millis();
   
   mqtt->handle();
-  mqtt->wave();
+  // mqtt->wave();
   if (currentMillis - lastInvokeTime >= dayMillis) {
       DateTime.begin(1000);
       lastInvokeTime = currentMillis;
   }
   ArduinoOTA.handle();
- // delay(1);
+  delay(30);
 }

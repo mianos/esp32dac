@@ -9,6 +9,8 @@
 struct Device {
   virtual void command_handler(String& dest, JsonDocument &jpl) = 0;
   virtual void simple_set(float value) = 0; // 0.0 to 100.0
+  virtual void set_value(int32_t value) { Serial.printf("Not done for this device yet\n"); }
+  virtual void set_voltage(double voltage) { Serial.printf("voltage Not done for this device yet\n"); }
 };
 
 struct MqttManagedDevices {

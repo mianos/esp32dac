@@ -13,4 +13,6 @@ struct DAC1220Mqtt : public Device {
 
     void command_handler(String& dest, JsonDocument &jpl) override;
     void simple_set(float value);
+    void set_value(int32_t value);
+    void set_voltage(double voltage);
 };

@@ -2,11 +2,22 @@
 #include "driver/spi_common.h"
 #include "driver/spi_master.h"
 
-DAC1220::DAC1220(int sck, int miso, int mosi, int cs, uint32_t freq)
-    : sckPin(sck), misoPin(miso), mosiPin(mosi), csPin(cs), frequency(freq) {
+DAC1220::DAC1220(BinMode bin_mode, int sck, int miso, int mosi, int cs, uint32_t freq)
+    : bin_mode(bin_mode), sckPin(sck), misoPin(miso), mosiPin(mosi), csPin(cs), frequency(freq) {
 }
 
+void DAC1220::set_bin_mode(BinMode bin_mode) {
+  if (bin_mode == StraightBinary) {
+    cmr |= (1 << CMR_DF);   // set the bit
+  } else {
+     cmr &= ~(1 << CMR_DF);  // clear the bit
+  }
+  set_command_register(cmr);
+}
+
+
 void DAC1220::begin() {
+  reset_all();
   initSPI();
   
   // Ideally apply the reset pattern, which enters the Normal mode when complete.
@@ -14,59 +25,48 @@ void DAC1220::begin() {
   // reset_all();
 
   // Set configuration to 20-bit, straight binary mode.
-  uint32_t cmr = read_command_register();
-  cmr |= (1 << CMR_RES) | (1 << CMR_DF);
+  cmr |= (1 << CMR_RES);
   set_command_register(cmr);
+
+  Serial.printf("Setting mode %d\n", bin_mode);
+  set_bin_mode(bin_mode);
 
   // Calibrate with the output connected.
   calibrate(true);
 }
 
 void DAC1220::reset_all() {
-#if 0
-  spi_end();
+    // Ensure SPI is not in use
+    spi_bus_free(HSPI_HOST);
 
-  // Temporarily switch CLK and CE0 pins to be outputs.
-  bcm2835_gpio_fsel(CLK_PIN, BCM2835_GPIO_FSEL_OUTP);
-  bcm2835_gpio_fsel(CE0_PIN, BCM2835_GPIO_FSEL_OUTP);
-  bcm2835_gpio_write(CLK_PIN, LOW);
-  bcm2835_gpio_write(CE0_PIN, LOW);
-  bcm2835_delayMicroseconds(t10/1000);
+    // Configure CS pin
+    pinMode(csPin, OUTPUT);
+    digitalWrite(csPin, LOW); // Activate DAC1220 CS
 
-  // Apply the reset pattern.
-  bcm2835_gpio_write(CLK_PIN, HIGH);
-  bcm2835_delayMicroseconds(t16/1000);
-  bcm2835_gpio_write(CLK_PIN, LOW);
-  bcm2835_delayMicroseconds(t17/1000);
-  bcm2835_gpio_write(CLK_PIN, HIGH);
-  bcm2835_delayMicroseconds(t18/1000);
-  bcm2835_gpio_write(CLK_PIN, LOW);
-  bcm2835_delayMicroseconds(t17/1000);
-  bcm2835_gpio_write(CLK_PIN, HIGH);
-  bcm2835_delayMicroseconds(t19/1000);
-  bcm2835_gpio_write(CLK_PIN, LOW); // DAC resets here.
+    // Manually reset DAC by toggling SCK
+    pinMode(sckPin, OUTPUT);
 
-  // Get ready to switch back to SPI mode.
-  bcm2835_delayMicroseconds(t14/1000);
-  bcm2835_gpio_write(CE0_PIN, HIGH);
-  bcm2835_delayMicroseconds(t15/1000);
-#endif
-}
+    // Reset sequence
+    digitalWrite(sckPin, LOW);
+    delay(1); // Ensure the DAC1220 recognizes the low state
+    digitalWrite(sckPin, HIGH);
+    delayMicroseconds(240); // First high period (approx. 600 clocks at a certain frequency)
+    digitalWrite(sckPin, LOW);
+    delayMicroseconds(5); // Short low period
+    digitalWrite(sckPin, HIGH);
+    delayMicroseconds(480); // Second high period (approx. 1200 clocks)
+    digitalWrite(sckPin, LOW);
+    delayMicroseconds(5); // Short low period
+    digitalWrite(sckPin, HIGH);
+    delayMicroseconds(960); // Third high period (approx. 2400 clocks)
+    digitalWrite(sckPin, LOW);
+    delay(1); // Ensure the DAC1220 recognizes the low state again
 
+    // Deactivate CS
+    digitalWrite(csPin, HIGH); // Deactivate DAC1220 CS
 
-void DAC1220::write24(uint32_t data) {
-    uint8_t tx_data[3];
-    
-    tx_data[0] = (data >> 12) & 0xFF; // Extracts the most significant 8 bits of the 20-bit value.
-    tx_data[1] = (data >> 4) & 0xFF;  // Extracts the middle 8 bits.
-    tx_data[2] = (data << 4) & 0xF0;  // Extracts the least significant 4 bits and places them in the MSBs of the last byte.
-
-
-    spi_transaction_t t;
-    memset(&t, 0, sizeof(t));  // Zero out the transaction
-    t.length = 24;             // Length in bits
-    t.tx_buffer = &tx_data;    // Transmit buffer
-    spi_device_transmit(spi, &t);  // Perform the SPI transaction
+    // Now, you can re-initialize the SPI bus for normal operations
+    initSPI();
 }
 
 void DAC1220::initSPI() {
@@ -81,7 +81,7 @@ void DAC1220::initSPI() {
 
     spi_device_interface_config_t spi_devcfg;
     memset(&spi_devcfg, 0, sizeof(spi_device_interface_config_t));
-    spi_devcfg.mode = 0;
+    spi_devcfg.mode = 1;
     spi_devcfg.clock_speed_hz = static_cast<int>(frequency);
     spi_devcfg.input_delay_ns = 20; //?
     spi_devcfg.spics_io_num = csPin;
@@ -89,12 +89,53 @@ void DAC1220::initSPI() {
 
 
     // Initialize the SPI bus and add the device
-    spi_bus_initialize(HSPI_HOST, &buscfg, 1);
-    spi_bus_add_device(HSPI_HOST, &spi_devcfg, &spi);
+//    spi_bus_initialize(HSPI_HOST, &buscfg, 1);
+//    spi_bus_add_device(HSPI_HOST, &spi_devcfg, &spi);
+
+
+    esp_err_t init_bus_result = spi_bus_initialize(HSPI_HOST, &buscfg, SPI_DMA_CH_AUTO);
+    if (init_bus_result != ESP_OK) {
+        Serial.printf("spi bus init fail\n");
+    }
+
+    esp_err_t add_device_result = spi_bus_add_device(HSPI_HOST, &spi_devcfg, &spi);
+    if (add_device_result != ESP_OK) {
+        Serial.printf("spi bus add  device fail\n");
+        // Handle error
+    }
+}
+
+/**
+ * Calibrates the DAC and switches automatically to Normal mode when complete.
+ */
+void DAC1220::calibrate(bool output_on) {
+  // Set desired output state during calibration.
+  if (output_on) {
+    cmr |= (1 << CMR_CALPIN);
+  } else {
+    cmr &= ~(1 << CMR_CALPIN);
+  }
+  set_command_register(cmr);
+
+  // Start calibration, in a separate call.
+  //uint32_t cal_cmd = cmr | (CMR_MD_CAL << CMR_MD);
+  uint32_t cal_cmd = (CMR_MD_CAL << CMR_MD);
+  Serial.printf("calibrate start\n");
+  set_command_register(cal_cmd);
+  // Wait 500 ms for calibration to complete.
+  delay(1000);
+  Serial.printf("calibrate end\n");
 }
 
 
 
+void printBinary(unsigned int value, int bitsCount = 8) {
+    for (int i = bitsCount - 1; i >= 0; --i) {
+        Serial.print((value >> i) & 1);
+        if (bitsCount == 3)
+          Serial.print(".");
+    }
+}
 
 void DAC1220::write_register(uint8_t cmd, uint32_t reg) {
     uint8_t buffer[4] = {cmd, 0, 0, 0}; // Ensure buffer is large enough for command + data
@@ -120,52 +161,17 @@ void DAC1220::write_register(uint8_t cmd, uint32_t reg) {
             t.length = 32; // Command byte + 3 data bytes = 32 bits
             break;
     }
-
+    for (auto ii = 0; ii < t.length / 8; ii++) {
+      Serial.printf("%2x ", buffer[ii]);
+      printBinary(buffer[ii]);
+      Serial.printf(" ");
+    }
+    Serial.printf("\n");
     t.tx_buffer = buffer; // Set the transmit buffer
     spi_device_transmit(spi, &t); // Transmit the transaction
 }
 
 
-
-uint32_t DAC1220::read_register(uint8_t cmd) {
-    uint8_t tx_buffer[4] = {cmd, 0, 0, 0}; // Buffer for command and padding
-    uint8_t rx_buffer[4] = {0}; // Buffer to hold received data
-    spi_transaction_t t;
-
-    memset(&t, 0, sizeof(t)); // Zero out the transaction
-    t.length = 8; // Command byte length in bits
-    t.tx_buffer = tx_buffer; // Transmit buffer
-    t.rxlength = 0; // Set receive length to 0 initially
-
-    // Determine the number of bytes to read based on the command
-    int num_bytes = 0;
-    switch (cmd & ((uint8_t)0b11 << CB_MB)) {
-        case (CB_MB_1 << CB_MB): // 1 byte
-            num_bytes = 1;
-            break;
-        case (CB_MB_2 << CB_MB): // 2 bytes
-            num_bytes = 2;
-            break;
-        case (CB_MB_3 << CB_MB): // 3 bytes
-            num_bytes = 3;
-            break;
-    }
-
-    if (num_bytes > 0) {
-        t.rxlength = num_bytes * 8; // Set receive length in bits
-        t.rx_buffer = rx_buffer; // Set receive buffer
-        // Send the command byte and read the response
-        spi_device_transmit(spi, &t); // Transmit the transaction
-    }
-
-    // Construct the value from the received bytes
-    uint32_t value = 0;
-    for (int i = 0; i < num_bytes; i++) {
-        value |= ((uint32_t)rx_buffer[i] << (8 * (num_bytes - 1 - i)));
-    }
-
-    return value;
-}
 
 
 /**
@@ -177,6 +183,52 @@ void DAC1220::set_value(uint32_t value) {
   set_data_input_register(value);
 }
 
+/**
+ * Generates output voltages specified as floating-point values between
+ * 0 and 2*referenceVoltage volts.
+ */
+#if 1
+void DAC1220::set_voltage(double value) {
+  // Range check to prevent overflow.
+  if (value < 0.0) {
+    Serial.printf("too low %g\n", value);
+  } else if (value >= 2*referenceVoltage) {
+    Serial.printf("too high %g\n", value);
+  }
+  auto ratio = value / referenceVoltage;
+  uint32_t count = ratio * 1048576; // 2^20
+  Serial.printf("value %g reference %g ratio %g count %d\n", value, referenceVoltage, ratio, count);
+  set_value(count << 4);
+  // Assumes 20-bit, straight-binary code.
+  //uint32_t code = (uint32_t) ((double)0x80000 * (value / referenceVoltage)); // Table 8 in datasheet.
+//  uint32_t code = (uint32_t) ((double)0x80000 * (value / referenceVoltage)); // Table 8 in datasheet.
+//  set_value(code);
+}
+#endif
+
+#if 0
+void DAC1220::set_voltage(double voltage) {
+    uint32_t dacValue;
+
+    if (bin_mode == TwosCompliment) {
+        // Handling for two's complement mode
+        double scaleFactor = static_cast<double>(maxDacValue) / (2 * referenceVoltage);
+        dacValue = static_cast<uint32_t>((voltage + referenceVoltage) * scaleFactor);
+    } else {
+        // Handling for straight binary mode
+        if (voltage < 0 || voltage > referenceVoltage) {
+            Serial.printf("Voltage out of range\n");
+            return;
+        }
+        double scaleFactor = static_cast<double>(maxDacValue) / referenceVoltage;
+        dacValue = static_cast<uint32_t>(voltage * scaleFactor);
+    }
+
+    // Left-justify the DAC value for 20-bit to 24-bit alignment
+    dacValue <<= 4;
+    set_value(dacValue);
+}
+#endif
 void DAC1220::set_command_register(uint32_t cmr) {
   // Register value set as a right-aligned 16-bit number (xxxxFFFFh).
   uint8_t cmd = (CB_RW_W << CB_RW) | (CB_MB_2 << CB_MB) | (CMR_ADR << CB_ADR);
@@ -189,47 +241,3 @@ void DAC1220::set_data_input_register(uint32_t dir) {
   uint8_t cmd = (CB_RW_W << CB_RW) | (CB_MB_3 << CB_MB) | (DIR_ADR << CB_ADR);
   write_register(cmd, dir);
 }
-
-
-void DAC1220::set_offset_calibration_register(uint32_t ocr) {
-  // Register value set as a right-aligned 24-bit number (xxFFFFFFh).
-  uint8_t cmd = (CB_RW_W << CB_RW) | (CB_MB_3 << CB_MB) | (OCR_ADR << CB_ADR);
-  write_register(cmd, ocr);
-}
-
-
-void DAC1220::set_full_scale_calibration_register(uint32_t fcr) {
-  // Register value set as a right-aligned 24-bit number (xxFFFFFFh).
-  uint8_t cmd = (CB_RW_W << CB_RW) | (CB_MB_3 << CB_MB) | (FCR_ADR << CB_ADR);
-  write_register(cmd, fcr);
-}
-
-
-uint32_t DAC1220::read_command_register() {
-  // Value returned as a right-aligned 16-bit number (xxxxFFFFh).
-  uint8_t cmd = (CB_RW_R << CB_RW) | (CB_MB_2 << CB_MB) | (CMR_ADR << CB_ADR);
-  return read_register(cmd);
-}
-
-
-uint32_t DAC1220::read_data_input_register() {
-  // Value returned as a right-aligned 24-bit number (xxFFFFFFh).
-  uint8_t cmd = (CB_RW_R << CB_RW) | (CB_MB_3 << CB_MB) | (DIR_ADR << CB_ADR);
-  return read_register(cmd);
-}
-
-
-uint32_t DAC1220::read_offset_calibration_register() {
-  // Value returned as a right-aligned 24-bit number (xxFFFFFFh).
-  uint8_t cmd = (CB_RW_R << CB_RW) | (CB_MB_3 << CB_MB) | (OCR_ADR << CB_ADR);
-  return read_register(cmd);
-}
-
-
-uint32_t DAC1220::read_full_scale_calibration_register() {
-  // Value returned as a right-aligned 24-bit number (xxFFFFFFh).
-  uint8_t cmd = (CB_RW_R << CB_RW) | (CB_MB_3 << CB_MB) | (FCR_ADR << CB_ADR);
-  return read_register(cmd);
-}
-
-

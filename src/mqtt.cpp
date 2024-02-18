@@ -99,7 +99,8 @@ void MqttManagedDevices::wave() {
   if (wcount == 100) {
     wcount = 0;
   }
-  device->simple_set(wcount++);
+//  device->simple_set(wcount++);
+  device->set_value((wcount++)  << 15);
 }
 
 void MqttManagedDevices::handle() {

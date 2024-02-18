@@ -7,7 +7,9 @@
 
 class DAC1220 {
 public:
-    DAC1220(int sckPin = 25, int misoPin = 27, int mosiPin = 26, int csPin = 33, uint32_t frequency = 1000000);
+    enum BinMode {StraightBinary, TwosCompliment} bin_mode;
+
+    DAC1220(BinMode bin_mode=StraightBinary, int sckPin = 25, int misoPin = 27, int mosiPin = 26, int csPin = 33, uint32_t frequency = 10000);
     void begin();
     void reset_all();
 
@@ -15,11 +17,13 @@ private:
     int sckPin, misoPin, mosiPin, csPin;  // Pin assignments
     uint32_t frequency;                   // SPI frequency
     spi_device_handle_t spi;              // SPI device handle
+    // Voltage reference
+    double referenceVoltage = 20.0; // 10V reference voltage but output to a bipolar op amp
 
     void write24(uint32_t data);
     void initSPI();
 
-
+    uint32_t cmr = 0;
 public:
   // Constants
   static constexpr uint32_t MAX_VALUE = 0xFFFFF;
@@ -57,34 +61,27 @@ public:
   static constexpr uint32_t CMR_MD_CAL = 0b01;
   static constexpr uint32_t CMR_MD_SLEEP = 0b10;
 
-  // Voltage reference
-  static constexpr double Vref = 2.500; // V
+  static constexpr uint32_t maxDacValue = 0xFFFFF; // Max value for 20-bit DAC
+  static constexpr uint32_t dacMidpoint = 0x80000; // Midpoint for two's complement
 
   // Modes
   enum class Mode {Sleep, Normal};
 private:
   void startup();
   void reset();
-  void calibrate(bool output_on = 0);
   void set_mode(Mode mode);
 
-  void set_value(uint32_t value);
-  void set_value(double value);
 
   void set_command_register(uint32_t cmr);
   void set_data_input_register(uint32_t dir = 0);
-  void set_offset_calibration_register(uint32_t ocr = 0);
-  void set_full_scale_calibration_register(uint32_t fcr = 0x800000);
-
-  uint32_t read_command_register();
-  uint32_t read_data_input_register();
-  uint32_t read_offset_calibration_register();
-  uint32_t read_full_scale_calibration_register();
 
   void write_register(uint8_t cmd, uint32_t reg);
-  uint32_t read_register(uint8_t cmd);
-
 public:
+  void set_value(uint32_t value);
+  void set_voltage(double voltage);
+  void set_reference(double voltage) { referenceVoltage = voltage; };
+  void set_bin_mode(BinMode bin_mode=TwosCompliment);
+  void calibrate(bool output_on = 1);
     // Function to reset DAC
     void reset(bool resetAll = false) {
 //        write24(resetAll ? DAC_RESET_ALL : DAC_RESET_INPUT);
@@ -102,6 +99,7 @@ public:
 
     // Function to write and update DAC channel A
     void writeA(uint16_t value) {
+      set_value(value);
 //        write24(DAC_WRITE_A_UPDATE_A | (value & 0xFFFF));
     }
 
