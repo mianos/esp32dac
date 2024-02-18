@@ -11,6 +11,6 @@ struct MCP4921Mqtt : public Device {
     MCP4921Mqtt(std::shared_ptr<SettingsManager> settings);
     virtual ~MCP4921Mqtt() = default;
 
-    void command_handler(String& dest, JsonDocument &jpl) override;
+    void command_handler(std::shared_ptr<GFX> gfx, String& dest, JsonDocument &jpl) override;
     void simple_set(float value);
 };

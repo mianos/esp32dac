@@ -18,7 +18,7 @@ DAC1220Mqtt::DAC1220Mqtt(std::shared_ptr<SettingsManager> settings) : settings(s
   dac->begin();
 }
 
-void DAC1220Mqtt::command_handler(String& dest, JsonDocument &jpl) {
+void DAC1220Mqtt::command_handler(std::shared_ptr<GFX> gfx, String& dest, JsonDocument &jpl) {
     Serial.printf("local handler dest %s\n", dest.c_str());
     // Implement specific command handling for DAC1220Mqtt
     if (dest == "set") {
@@ -51,6 +51,7 @@ void DAC1220Mqtt::command_handler(String& dest, JsonDocument &jpl) {
         auto voltage = jpl["value"].as<double>();
         Serial.printf("setting voltage to %g\n", voltage);
         dac->set_voltage(voltage);
+        gfx->displayVoltage(voltage);
       } else {
         Serial.printf("needs {\"value\": <double>}");
       }

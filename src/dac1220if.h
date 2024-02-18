@@ -11,7 +11,7 @@ struct DAC1220Mqtt : public Device {
     DAC1220Mqtt(std::shared_ptr<SettingsManager> settings);
     virtual ~DAC1220Mqtt() = default;
 
-    void command_handler(String& dest, JsonDocument &jpl) override;
+    void command_handler(std::shared_ptr<GFX> gfx, String& dest, JsonDocument &jpl) override;
     void simple_set(float value);
     void set_value(int32_t value);
     void set_voltage(double voltage);

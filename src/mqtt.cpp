@@ -51,15 +51,17 @@ void MqttManagedDevices::callback(char* topic_str, byte* payload, unsigned int l
             auto result = settings->loadFromDocument(jpl);
             // Implement specific settings update logic
         } else {
-            device->command_handler(dest, jpl);
+            device->command_handler(gfx, dest, jpl);
         }
     }
 }
 
 
 MqttManagedDevices::MqttManagedDevices(std::shared_ptr<SettingsManager> settings,
+                                       std::shared_ptr<GFX> gfx,
                                        std::unique_ptr<Device> device)
     : settings(settings),
+      gfx(gfx),
       device(std::move(device)),
       client(espClient) {
     client.setBufferSize(MQTT_BUFFER_SIZE);

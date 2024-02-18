@@ -11,6 +11,6 @@ struct DAC8562Mqtt : public Device {
     DAC8562Mqtt(std::shared_ptr<SettingsManager> settings);
     virtual ~DAC8562Mqtt() = default;
 
-    void command_handler(String& dest, JsonDocument &jpl) override;
+    void command_handler(std::shared_ptr<GFX> gfx, String& dest, JsonDocument &jpl) override;
     void simple_set(float value);
 };

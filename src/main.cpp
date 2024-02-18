@@ -4,6 +4,7 @@
 #include <Wire.h>
 #include <esp_wifi.h>
 
+#include "gfx.h"
 
 #include "provision.h"
 #include "mqtt.h"
@@ -12,10 +13,12 @@
 #include "dac8562if.h"
 #include "dac1220if.h"
 
+
 WiFiClient wifiClient;
 
 std::shared_ptr<MqttManagedDevices> mqtt;
 std::shared_ptr<SettingsManager> settings;
+std::shared_ptr<GFX> gfx;
 // std::unique_ptr<MCP4921Mqtt> dac;
 // std::unique_ptr<DAC8562Mqtt> tidac;
 
@@ -26,6 +29,7 @@ void setup() {
   Serial.begin(115200);
 //  esp_wifi_set_ps(WIFI_PS_NONE);
 
+  gfx = std::make_shared<GFX>();
   delay(2000);
   wifi_connect();
   settings = std::make_shared<SettingsManager>();
@@ -42,7 +46,7 @@ void setup() {
 #else
   auto dac = std::make_unique<DAC1220Mqtt>(settings);
 #endif
-  mqtt = std::make_shared<MqttManagedDevices>(settings, std::move(dac));
+  mqtt = std::make_shared<MqttManagedDevices>(settings, gfx, std::move(dac));
 }
 
 //int ii;
