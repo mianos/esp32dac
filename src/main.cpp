@@ -8,6 +8,7 @@
 
 #include "provision.h"
 #include "mqtt.h"
+#include "gen.h"
 
 #include "mcp4921if.h"
 #include "dac8562if.h"
@@ -47,6 +48,9 @@ void setup() {
   auto dac = std::make_unique<DAC1220Mqtt>(settings);
 #endif
   mqtt = std::make_shared<MqttManagedDevices>(settings, gfx, std::move(dac));
+  signal_gen(10000000);
+	initializePCNT();
+	initialize_hardware_timer();
 }
 
 //int ii;
@@ -61,5 +65,6 @@ void loop() {
       lastInvokeTime = currentMillis;
   }
   ArduinoOTA.handle();
-  delay(30);
+  checkPCNTOverflow();
+  delay(100);
 }
