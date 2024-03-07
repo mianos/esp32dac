@@ -87,13 +87,21 @@ void initializePCNT() {
 
 volatile int timer_count = 0;
 
-void checkPCNTOverflow() {
+volatile enum {
+	IDLE, COUNTING, IDLE_WAIT
+} currentState = IDLE;
+
+bool checkPCNTOverflow() {
 	int countValue;
 
     // Check if there are any new counts and print them
     if (xQueueReceive(countQueue, &countValue, portMAX_DELAY) == pdPASS) {
         Serial.printf("New count: %d\n", countValue);
     }
+	if (currentState == IDLE_WAIT) {
+		return true;
+	}
+	return false;
 }
 
 
@@ -101,61 +109,59 @@ void checkPCNTOverflow() {
 #define TIMER_IDX TIMER_0
 
 
-volatile enum {
-	IDLE, COUNTING
-} currentState = IDLE;
 
 const int period = 10; // Desired counting period in seconds
+const int idleWaitPeriod = 5; // Configurable idle wait period in seconds
 volatile int secondsElapsed = 0; // Tracks elapsed seconds during COUNTING state
 
+
 extern "C" void IRAM_ATTR timer_group0_isr(void* para) {
-    static BaseType_t xHigherPriorityTaskWoken;
-
-    // FSM logic for controlling the PCNT based on timer interrupts
-    switch (currentState) {
-        case IDLE:
-            // Transition from IDLE to COUNTING
-            currentState = COUNTING;
-            secondsElapsed = 0; // Reset elapsed time
-			pcnt_overflow_counter = 0;
-            pcnt_counter_clear(PCNT_UNIT); // Reset the PCNT counter
-            pcnt_counter_resume(PCNT_UNIT); // Start counting
-            break;
-
-        case COUNTING:
-            secondsElapsed++; // Increment the seconds counter
-            if (secondsElapsed >= period) {
-                // Period has elapsed, stop counting, process the count, then go IDLE
-                pcnt_counter_pause(PCNT_UNIT); // Stop counting
-
-                // Process the counted pulses here
-                int16_t count = 0;
-                pcnt_get_counter_value(PCNT_UNIT, &count); // Get the pulse count
-
-				int finalCount = PCNT_H_LIM_VAL * pcnt_overflow_counter + count + 11;// TODO: this handler 11 uS
-
-				// Reset for the next period
-				currentState = IDLE;
-				secondsElapsed = 0;
-
-				// Send the final count to the queue from ISR
-				xHigherPriorityTaskWoken = pdFALSE;
-				xQueueSendFromISR(countQueue, &finalCount, &xHigherPriorityTaskWoken);
-//				if(xHigherPriorityTaskWoken == pdTRUE) {
-//					portYIELD_FROM_ISR(); // Ensure the higher priority task is executed immediately
-//				}
-                currentState = IDLE; // Go back to IDLE state
-            }
-            break;
-    }
-    if (TIMER_IDX == TIMER_0) {
-        TIMERG0.int_clr_timers.t0 = 1;
-    } else if (TIMER_IDX == TIMER_1) {
-        TIMERG0.int_clr_timers.t1 = 1;
-    }
-    TIMERG0.hw_timer[TIMER_IDX].config.alarm_en = TIMER_ALARM_EN;
-	timer_count++;
-
+  static BaseType_t xHigherPriorityTaskWoken;
+  // FSM logic for controlling the PCNT based on timer interrupts
+  switch (currentState) {
+    case IDLE:
+      // Transition from IDLE to COUNTING
+      currentState = COUNTING;
+      secondsElapsed = 0; // Reset elapsed time
+      pcnt_overflow_counter = 0;
+      pcnt_counter_clear(PCNT_UNIT); // Reset the PCNT counter
+      pcnt_counter_resume(PCNT_UNIT); // Start counting
+      break;
+    case COUNTING:
+      secondsElapsed++; // Increment the seconds counter
+      if (secondsElapsed >= period) {
+        // Period has elapsed, stop counting, process the count, then go to IDLE_WAIT
+        pcnt_counter_pause(PCNT_UNIT); // Stop counting
+        // Process the counted pulses here
+        int16_t count = 0;
+        pcnt_get_counter_value(PCNT_UNIT, &count); // Get the pulse count
+        int finalCount = PCNT_H_LIM_VAL * pcnt_overflow_counter + count + 11;// TODO: this handler 11 uS
+        // Reset for the next period
+        currentState = IDLE_WAIT;
+        secondsElapsed = 0;
+        // Send the final count to the queue from ISR
+        xHigherPriorityTaskWoken = pdFALSE;
+        xQueueSendFromISR(countQueue, &finalCount, &xHigherPriorityTaskWoken);
+        if (xHigherPriorityTaskWoken == pdTRUE) {
+          portYIELD_FROM_ISR(); // Ensure the higher priority task is executed immediately
+        }
+      }
+      break;
+    case IDLE_WAIT:
+      secondsElapsed++;
+      if (secondsElapsed >= idleWaitPeriod) {
+        // Idle wait period has elapsed, go back to IDLE
+        currentState = IDLE;
+      }
+      break;
+  }
+  if (TIMER_IDX == TIMER_0) {
+    TIMERG0.int_clr_timers.t0 = 1;
+  } else if (TIMER_IDX == TIMER_1) {
+    TIMERG0.int_clr_timers.t1 = 1;
+  }
+  TIMERG0.hw_timer[TIMER_IDX].config.alarm_en = TIMER_ALARM_EN;
+  timer_count++;
 }
 
 void initialize_hardware_timer() {

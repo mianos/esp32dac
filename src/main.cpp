@@ -58,13 +58,14 @@ void setup() {
 void loop() {
   unsigned long currentMillis = millis();
   
-  mqtt->handle();
-  // mqtt->wave();
-  if (currentMillis - lastInvokeTime >= dayMillis) {
-      DateTime.begin(1000);
-      lastInvokeTime = currentMillis;
+  if (checkPCNTOverflow()) {
+	  // mqtt->handle();
+	  // mqtt->wave();
+	  if (currentMillis - lastInvokeTime >= dayMillis) {
+		  DateTime.begin(1000);
+		  lastInvokeTime = currentMillis;
+	  }
   }
   ArduinoOTA.handle();
-  checkPCNTOverflow();
-  delay(100);
+  delay(1);
 }
