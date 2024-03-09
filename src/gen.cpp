@@ -3,12 +3,14 @@
 #include <ESPDateTime.h>
 #include "driver/ledc.h"
 #include "driver/pcnt.h"
-#include "driver/timer.h"
+#include "driver/gpio.h"
 #include "esp_err.h"
 #include "esp_attr.h"
+#include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 
+#include "gen.h"
 
 void signal_gen(uint32_t freq_hz, int gpio) {
     // Configure the timer
@@ -42,7 +44,7 @@ QueueHandle_t countQueue;
 #define PCNT_H_LIM_VAL      25000
 #define PCNT_L_LIM_VAL      -1
 
-volatile int pcnt_overflow_counter = 0;
+volatile static int pcnt_overflow_counter = 0;
 
 static void IRAM_ATTR pcnt_intr_handler(void *arg) {
     pcnt_overflow_counter++;
@@ -87,109 +89,104 @@ void initializePCNT() {
 
 volatile int timer_count = 0;
 
-volatile enum {
-	IDLE, COUNTING, IDLE_WAIT
-} currentState = IDLE;
+static int period = 10; // Desired counting period in seconds
+volatile static enum CurrentState_t currentState = IDLE;
 
-bool checkPCNTOverflow() {
-	int countValue;
+void	SetState(CurrentState_t newState) {
+	currentState = newState;
+}
 
-    // Check if there are any new counts and print them
-    if (xQueueReceive(countQueue, &countValue, portMAX_DELAY) == pdPASS) {
-        Serial.printf("New count: %d\n", countValue);
-    }
-	if (currentState == IDLE_WAIT) {
-		return true;
+void runTest(int seconds) {
+	if (currentState != IDLE) {
+		Serial.printf("State is not idle\n");
+		return;
 	}
-	return false;
+	period = seconds;
+	currentState = START;
+	Serial.printf("started test\n");
+}
+
+enum CurrentState_t checkPCNTOverflow() {
+  CurrentState_t newState;
+
+  while (xQueueReceive(countQueue, &newState, 0) == pdPASS) { 
+    Serial.printf("State changed to: %d\n", newState);
+
+    if (newState == IDLE) { // Assuming count retrieval makes sense only after IDLE_WAIT
+      int16_t count = 0;
+      pcnt_get_counter_value(PCNT_UNIT, &count);
+      int totalCounts = PCNT_H_LIM_VAL * pcnt_overflow_counter + count + 11; // Replace '11' with actual adjustment
+      Serial.printf("New count: %d scaled %7.2f\n", totalCounts, (double)totalCounts / (double)period);
+//	  esp_err_t results = esp_wifi_start();
+//	 } else if (newState == PRE_COUNT) {
+//		esp_err_t results = esp_wifi_stop();
+
+    } 
+  }
+
+  return currentState; 
 }
 
 
-#define TIMER_GROUP TIMER_GROUP_0
-#define TIMER_IDX TIMER_0
+int secondsElapsed = 0;
 
 
-
-const int period = 10; // Desired counting period in seconds
-const int idleWaitPeriod = 5; // Configurable idle wait period in seconds
-volatile int secondsElapsed = 0; // Tracks elapsed seconds during COUNTING state
-
-
-extern "C" void IRAM_ATTR timer_group0_isr(void* para) {
+extern "C" void IRAM_ATTR one_pps_handler(void* para) {
   static BaseType_t xHigherPriorityTaskWoken;
-  // FSM logic for controlling the PCNT based on timer interrupts
+
   switch (currentState) {
-    case IDLE:
-      // Transition from IDLE to COUNTING
-      currentState = COUNTING;
-      secondsElapsed = 0; // Reset elapsed time
+    case STOPPED:
+      currentState = IDLE;
+      xQueueSendFromISR(countQueue, (const void*) &currentState, &xHigherPriorityTaskWoken);  // still send IDLE, STOP never seen
+      break;
+
+	case IDLE:
+	  break;
+	
+	case START:
+      secondsElapsed = 0;
       pcnt_overflow_counter = 0;
-      pcnt_counter_clear(PCNT_UNIT); // Reset the PCNT counter
-      pcnt_counter_resume(PCNT_UNIT); // Start counting
-      break;
+      pcnt_counter_clear(PCNT_UNIT);
+      pcnt_counter_resume(PCNT_UNIT);
+	  currentState = COUNTING;
+      xQueueSendFromISR(countQueue, (const void*) &currentState, &xHigherPriorityTaskWoken); 
+	  break;
+
     case COUNTING:
-      secondsElapsed++; // Increment the seconds counter
-      if (secondsElapsed >= period) {
-        // Period has elapsed, stop counting, process the count, then go to IDLE_WAIT
-        pcnt_counter_pause(PCNT_UNIT); // Stop counting
-        // Process the counted pulses here
-        int16_t count = 0;
-        pcnt_get_counter_value(PCNT_UNIT, &count); // Get the pulse count
-        int finalCount = PCNT_H_LIM_VAL * pcnt_overflow_counter + count + 11;// TODO: this handler 11 uS
-        // Reset for the next period
-        currentState = IDLE_WAIT;
-        secondsElapsed = 0;
-        // Send the final count to the queue from ISR
-        xHigherPriorityTaskWoken = pdFALSE;
-        xQueueSendFromISR(countQueue, &finalCount, &xHigherPriorityTaskWoken);
-        if (xHigherPriorityTaskWoken == pdTRUE) {
-          portYIELD_FROM_ISR(); // Ensure the higher priority task is executed immediately
-        }
-      }
-      break;
-    case IDLE_WAIT:
       secondsElapsed++;
-      if (secondsElapsed >= idleWaitPeriod) {
-        // Idle wait period has elapsed, go back to IDLE
-        currentState = IDLE;
+      if (secondsElapsed >= period) {
+        pcnt_counter_pause(PCNT_UNIT);
+        currentState = STOPPED;
+		xQueueSendFromISR(countQueue, (const void*) &currentState, &xHigherPriorityTaskWoken); 
       }
       break;
+
   }
-  if (TIMER_IDX == TIMER_0) {
-    TIMERG0.int_clr_timers.t0 = 1;
-  } else if (TIMER_IDX == TIMER_1) {
-    TIMERG0.int_clr_timers.t1 = 1;
+
+  if (xHigherPriorityTaskWoken == pdTRUE) {
+      portYIELD_FROM_ISR(); 
   }
-  TIMERG0.hw_timer[TIMER_IDX].config.alarm_en = TIMER_ALARM_EN;
-  timer_count++;
 }
+
+#define GPIO_INPUT_PIN 15
+#define GPIO_INPUT_PIN_MASK (1ULL<<GPIO_INPUT_PIN)
+#define ESP_INTR_FLAG_DEFAULT 0
 
 void initialize_hardware_timer() {
-    // Correctly configure the timer
-    timer_config_t config = {};
-    config.divider = 80;
-    config.counter_dir = TIMER_COUNT_UP;
-    config.counter_en = TIMER_PAUSE;
-    config.alarm_en = TIMER_ALARM_EN;
-    config.intr_type = TIMER_INTR_LEVEL;
-    config.auto_reload = TIMER_AUTORELOAD_EN; // Use enum value instead of true
+    // Configure GPIO 15 as input
+    gpio_config_t io_conf = {};
+    io_conf.intr_type = GPIO_INTR_POSEDGE; // Set interrupt on rising edge
+    io_conf.mode = GPIO_MODE_INPUT; // Set as input mode
+    io_conf.pin_bit_mask = GPIO_INPUT_PIN_MASK; // Bitmask for GPIO 15
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE; // Disable pull-down
+    io_conf.pull_up_en = GPIO_PULLUP_ENABLE; // Enable pull-up
+    gpio_config(&io_conf);
 
-    timer_init(TIMER_GROUP, TIMER_IDX, &config);
+    // Install GPIO ISR service
+    gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT); // Install ISR service with default flags
 
-    // Set counter and alarm values
-    timer_set_counter_value(TIMER_GROUP, TIMER_IDX, 0x00000000ULL);
-    timer_set_alarm_value(TIMER_GROUP, TIMER_IDX, 1000000ULL); // 1 second
+    // Attach the interrupt service routine
+	gpio_isr_handler_add(static_cast<gpio_num_t>(GPIO_INPUT_PIN), one_pps_handler, NULL); // Cast GPIO number here if necessary
 
-    // Enable interrupt and register ISR
-    timer_enable_intr(TIMER_GROUP, TIMER_IDX);
-
-	int timer_intr_alloc_flags = ESP_INTR_FLAG_IRAM | ESP_INTR_FLAG_SHARED;
-
-	timer_isr_register(TIMER_GROUP, TIMER_IDX, timer_group0_isr, 
-					   reinterpret_cast<void*>(static_cast<intptr_t>(TIMER_IDX)), timer_intr_alloc_flags, NULL);
-
-
-    // Start the timer
-    timer_start(TIMER_GROUP, TIMER_IDX);
 }
 

@@ -47,25 +47,58 @@ void setup() {
 #else
   auto dac = std::make_unique<DAC1220Mqtt>(settings);
 #endif
-  mqtt = std::make_shared<MqttManagedDevices>(settings, gfx, std::move(dac));
-  signal_gen(10000000);
+	mqtt = std::make_shared<MqttManagedDevices>(settings, gfx, std::move(dac));
+	signal_gen(10000000);
 	initializePCNT();
 	initialize_hardware_timer();
 }
 
 //int ii;
 
+enum State {
+    STATE_IDLE,
+    STATE_TEST_RUNNING,
+    STATE_TEST_COMPLETE
+};
+
+State currentState = STATE_IDLE;
+bool testRunning = false;
+unsigned long testStartTime = 0;
+const int testDuration = 10; // Duration of the test, in seconds
+const int delayBetweenTests = 20; // Delay between tests, in seconds
+
 void loop() {
-  unsigned long currentMillis = millis();
-  
-  if (checkPCNTOverflow()) {
-	  // mqtt->handle();
-	  // mqtt->wave();
-	  if (currentMillis - lastInvokeTime >= dayMillis) {
-		  DateTime.begin(1000);
-		  lastInvokeTime = currentMillis;
-	  }
-  }
-  ArduinoOTA.handle();
-  delay(1);
+    unsigned long currentMillis = millis();
+    auto state = checkPCNTOverflow();
+
+    switch (currentState) {
+        case STATE_IDLE:
+            if (state == IDLE && !testRunning) {
+                runTest(testDuration);
+                Serial.printf("Test running\n");
+                testRunning = true;
+                testStartTime = currentMillis;
+                lastInvokeTime = currentMillis; // Ensure this is only updated when we start a new test
+                currentState = STATE_TEST_RUNNING;
+            }
+            break;
+
+        case STATE_TEST_RUNNING:
+            if (currentMillis - testStartTime >= testDuration * 1000UL) {
+                currentState = STATE_TEST_COMPLETE;
+                testRunning = false;
+				Serial.printf("Test done, waiting\n");
+            }
+            break;
+
+        case STATE_TEST_COMPLETE:
+            if (currentMillis - testStartTime >= (testDuration + delayBetweenTests) * 1000UL) {
+                currentState = STATE_IDLE;
+            }
+            break;
+    }
+
+    // Your existing loop actions
+    ArduinoOTA.handle();
+    delay(10); // Consider replacing with a non-blocking delay if precise timing is needed
 }

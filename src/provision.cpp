@@ -46,13 +46,13 @@ void SysProvEvent(arduino_event_t *sys_event)
         Serial.printf("Prov: scan done\n");
         break;
     case SYSTEM_EVENT_STA_START:
-        Serial.printf("Station start\n");
+//        Serial.printf("Station start\n");
         break;
     case SYSTEM_EVENT_STA_CONNECTED:
         Serial.printf("Station connected\n");
         break;
     default:
-        Serial.printf("Some other event %d\n", sys_event->event_id);
+//        Serial.printf("Some other event %d\n", sys_event->event_id);
         break;
     }
 }
