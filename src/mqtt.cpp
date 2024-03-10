@@ -108,6 +108,7 @@ void MqttManagedDevices::wave() {
 void MqttManagedDevices::handle() {
     if (!client.connected()) {
         if (!reconnect()) {
+			Serial.printf("Failed reconnect, no loop\n");
             return;
         }
     }
@@ -115,3 +116,13 @@ void MqttManagedDevices::handle() {
     client.loop();
 }
 
+void MqttManagedDevices::publish_result(double result) {
+	JsonDocument doc;
+	doc["time"] = DateTime.toISOString();
+	doc["result"] = result;
+	settings->fillJsonDocument(doc);
+	String status_topic = "tele/" + settings->sensorName + "/result";
+	String output;
+	serializeJson(doc, output);
+	client.publish(status_topic.c_str(), output.c_str());
+}

@@ -37,5 +37,6 @@ struct MqttManagedDevices {
 
     int wcount = 0;
     void wave();
+	void publish_result(double result);
 };
 

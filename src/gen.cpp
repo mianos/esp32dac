@@ -6,7 +6,6 @@
 #include "driver/gpio.h"
 #include "esp_err.h"
 #include "esp_attr.h"
-#include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 
@@ -117,10 +116,6 @@ enum CurrentState_t checkPCNTOverflow() {
       pcnt_get_counter_value(PCNT_UNIT, &count);
       int totalCounts = PCNT_H_LIM_VAL * pcnt_overflow_counter + count + 11; // Replace '11' with actual adjustment
       Serial.printf("New count: %d scaled %7.2f\n", totalCounts, (double)totalCounts / (double)period);
-//	  esp_err_t results = esp_wifi_start();
-//	 } else if (newState == PRE_COUNT) {
-//		esp_err_t results = esp_wifi_stop();
-
     } 
   }
 
