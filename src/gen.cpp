@@ -102,26 +102,29 @@ void runTest(int seconds) {
 	}
 	period = seconds;
 	currentState = START;
-	Serial.printf("started test\n");
 }
+
+static int totalCounts;
 
 enum CurrentState_t checkPCNTOverflow() {
   CurrentState_t newState;
 
   while (xQueueReceive(countQueue, &newState, 0) == pdPASS) { 
-    Serial.printf("State changed to: %d\n", newState);
+    //' Serial.printf("State changed to: %d\n", newState);
 
     if (newState == IDLE) { // Assuming count retrieval makes sense only after IDLE_WAIT
       int16_t count = 0;
       pcnt_get_counter_value(PCNT_UNIT, &count);
-      int totalCounts = PCNT_H_LIM_VAL * pcnt_overflow_counter + count + 11; // Replace '11' with actual adjustment
-      Serial.printf("New count: %d scaled %7.2f\n", totalCounts, (double)totalCounts / (double)period);
+      totalCounts = PCNT_H_LIM_VAL * pcnt_overflow_counter + count;
+     // Serial.printf("New count: %d scaled %7.2f\n", totalCounts, (double)totalCounts / (double)period);
     } 
   }
-
   return currentState; 
 }
 
+int get_LastTestCount() {
+	return totalCounts;
+}
 
 int secondsElapsed = 0;
 

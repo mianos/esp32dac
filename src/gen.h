@@ -10,3 +10,5 @@ extern enum CurrentState_t checkPCNTOverflow();
 extern void initialize_hardware_timer();
 extern void	SetState(CurrentState_t newState);
 extern void runTest(int seconds);
+extern int get_LastTestCount();
+

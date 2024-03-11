@@ -120,7 +120,6 @@ void MqttManagedDevices::publish_result(double result) {
 	JsonDocument doc;
 	doc["time"] = DateTime.toISOString();
 	doc["result"] = result;
-	settings->fillJsonDocument(doc);
 	String status_topic = "tele/" + settings->sensorName + "/result";
 	String output;
 	serializeJson(doc, output);
