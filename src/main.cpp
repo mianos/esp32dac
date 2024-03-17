@@ -4,6 +4,7 @@
 #include <SPI.h> 
 #include <Wire.h>
 #include "esp_wifi.h"
+#include "esp_task_wdt.h"
 
 #include "gfx.h"
 
@@ -11,12 +12,18 @@
 #include "mqtt.h"
 #include "gen.h"
 
+
+#if DAC == 4921
 #include "mcp4921if.h"
+#elif DAC == 8562
 #include "dac8562if.h"
+#elif DAC == 1220
 #include "dac1220if.h"
+#endif
 
 
 WiFiClient wifiClient;
+
 bool testWiFiConnection();
 
 std::shared_ptr<MqttManagedDevices> mqtt;
@@ -25,8 +32,10 @@ std::shared_ptr<GFX> gfx;
 // std::unique_ptr<MCP4921Mqtt> dac;
 // std::unique_ptr<DAC8562Mqtt> tidac;
 
-//unsigned long lastInvokeTime = 0; // Store the last time you called the function
 //const unsigned long dayMillis = 24UL * 60 * 60 * 1000; // Milliseconds in a day
+
+const int MAX_QUEUE_SIZE = 20;
+QueueHandle_t testQueue;
 
 void setup() {
   Serial.begin(115200);
@@ -39,7 +48,6 @@ void setup() {
   
   DateTime.setTimeZone(settings->tz.c_str());
   DateTime.begin(/* timeout param */);
-//  lastInvokeTime = millis();
   if (!DateTime.isTimeValid()) {
     Serial.printf("Failed to get time from server\n");
   }
@@ -50,6 +58,9 @@ void setup() {
   auto dac = std::make_unique<DAC1220Mqtt>(settings);
 #endif
 	mqtt = std::make_shared<MqttManagedDevices>(settings, gfx, std::move(dac));
+
+	testQueue = xQueueCreate(MAX_QUEUE_SIZE, sizeof(TestConfig));
+
 	signal_gen(10000000);
 	initializePCNT();
 	initialize_hardware_timer();
@@ -74,8 +85,10 @@ bool testWiFiConnection() {
     }
 }
 
+
 enum State {
     STATE_IDLE,
+    STATE_TEST_STARTING,
     STATE_TEST_RUNNING,
     STATE_TEST_STOPPING,
     STATE_TEST_COMPLETE,
@@ -87,54 +100,82 @@ enum State {
 State currentState = STATE_IDLE;
 bool testRunning = false;
 unsigned long testStartTime = 0;
-const int testDuration = 10; // Duration of the test, in seconds
-const int delayBeforeTestEnd = 5; // Delay before the test ends to stop WiFi, in seconds
-const int delayBetweenTests = 30; // Delay between tests, in seconds
-unsigned long lastInvokeTime = 0; // Declare and initialize lastInvokeTime
+TestConfig currentTest;
+
+const int delayBeforeTestEnd = 3; // Delay before the test ends to stop WiFi, in seconds
+const int delayBetweenTests = 5; // Delay between tests, in seconds
+
+void printStateChange(int newTestState, int newCurrentState) {
+    static int lastTestState = -1;
+    static int lastCurrentState = -1;
+    if (newTestState != lastTestState || newCurrentState != lastCurrentState) {
+        Serial.printf("test state %d current upper state %d\n", newTestState, newCurrentState);
+        lastTestState = newTestState;
+        lastCurrentState = newCurrentState;
+    }
+}
 
 void loop() {
     unsigned long currentMillis = millis();
     auto test_state = checkPCNTOverflow();
     esp_err_t result; // Declare result outside the switch statement
 
+    printStateChange(test_state, currentState);
+
     switch (currentState) {
         case STATE_IDLE:
             if (test_state == IDLE && !testRunning) {
-                runTest(testDuration);
+                mqtt->handle();
+                if (xQueueReceive(testQueue, &currentTest, 0) == pdTRUE) {
+                    currentState = STATE_TEST_STARTING;
+                    Serial.printf("Run test period %d\n", currentTest.period);
+                }
+            }
+            break;
+
+        case STATE_TEST_STARTING:
+            if (currentMillis - testStartTime >= delayBeforeTestEnd * 1000UL) {
+                esp_task_wdt_deinit();
+                runTest(currentTest.period);
                 testRunning = true;
                 testStartTime = currentMillis;
-                lastInvokeTime = currentMillis;
                 currentState = STATE_TEST_RUNNING;
             }
             break;
 
         case STATE_TEST_RUNNING:
-            if (currentMillis - testStartTime >= (testDuration - delayBeforeTestEnd) * 2000UL) {
+            if (currentMillis - testStartTime >= (currentTest.period - delayBeforeTestEnd) * 1000UL) {
                 result = esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
                 if (result == ESP_OK) {
-					currentState = STATE_TEST_STOPPING;
+                    currentState = STATE_TEST_STOPPING;
                 } else {
-                    Serial.printf("esp wifi not stopped stopped\n");
-				}
+                    Serial.printf("esp wifi not stopped\n");
+                }
             }
             break;
 
         case STATE_TEST_STOPPING:
-            if (test_state == STOPPED) {
+            if (test_state == IDLE) {
                 currentState = STATE_TEST_COMPLETE;
                 testRunning = false;
             }
             break;
 
         case STATE_TEST_COMPLETE:
-            currentState = STATE_WIFI_CONNECTED;
+            esp_task_wdt_init(60, true);
+            result = esp_wifi_set_ps(WIFI_PS_NONE); // Wake up the ESP32 from sleep mode
+            if (result == ESP_OK) {
+                currentState = STATE_WIFI_CONNECTED;
+            } else {
+                Serial.printf("Failed to wake up ESP32 from sleep mode\n");
+            }
             break;
 
         case STATE_WIFI_CONNECTED:
             if (WiFi.status() == WL_CONNECTED) {
                 testWiFiConnection();
-				mqtt->handle();
-                mqtt->publish_result((double)get_LastTestCount() / (double)testDuration);
+                mqtt->handle();
+                mqtt->publish_result(currentTest);
                 currentState = STATE_MQTT_PUBLISHED;
             } else {
                 Serial.printf("not connected\n");
@@ -144,8 +185,13 @@ void loop() {
 
         case STATE_MQTT_PUBLISHED:
             mqtt->handle();
-            currentState = STATE_MQTT_WORKER_LOOP;
-            testStartTime = currentMillis; // Update the start time for the delay between tests
+            if (currentTest.repeat > 0) {
+                currentTest.repeat--;
+                currentState = STATE_MQTT_WORKER_LOOP;
+                testStartTime = currentMillis; // Update the start time for the delay between tests
+            } else {
+                currentState = STATE_IDLE; // Move to IDLE state if no more repeats
+            }
             break;
 
         case STATE_MQTT_WORKER_LOOP:
@@ -159,5 +205,5 @@ void loop() {
 
     // Your existing loop actions
     ArduinoOTA.handle();
-    delay(10);
+    delay(500);
 }

@@ -1,4 +1,5 @@
 #pragma once
+#if DAC == 1220
 #include "mqtt.h"
 #include "settings.h"
 #include "dac1220.h"
@@ -16,3 +17,4 @@ struct DAC1220Mqtt : public Device {
     void set_value(int32_t value);
     void set_voltage(double voltage);
 };
+#endif

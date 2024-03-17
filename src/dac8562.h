@@ -1,4 +1,5 @@
 #pragma once
+#if DAC == 8562
 
 #include <Arduino.h>
 #include "driver/spi_master.h"
@@ -78,3 +79,4 @@ public:
     }
 };
 
+#endif

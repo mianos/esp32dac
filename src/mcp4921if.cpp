@@ -1,3 +1,4 @@
+#if DAC == 4921
 #include "mcp4921if.h"
 
 void MCP4921Mqtt::simple_set(float value) {
@@ -33,3 +34,4 @@ void MCP4921Mqtt::command_handler(std::shared_ptr<GFX> gfx, String& dest, JsonDo
       Serial.printf("Unknown command '%s'\n", dest.c_str());
     }
 }
+#endif

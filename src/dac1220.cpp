@@ -1,3 +1,4 @@
+#if DAC == 1220
 #include "dac1220.h"
 #include "driver/spi_common.h"
 #include "driver/spi_master.h"
@@ -241,3 +242,4 @@ void DAC1220::set_data_input_register(uint32_t dir) {
   uint8_t cmd = (CB_RW_W << CB_RW) | (CB_MB_3 << CB_MB) | (DIR_ADR << CB_ADR);
   write_register(cmd, dir);
 }
+#endif

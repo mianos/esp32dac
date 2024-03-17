@@ -1,4 +1,5 @@
 #pragma once
+#if DAC == 8562
 
 #include <Arduino.h>
 #include "driver/spi_master.h"
@@ -48,3 +49,4 @@ public:
         write16(DAC_SELECT_A | BUFFERED_VREF | currentGain | OUTPUT_ACTIVE | value);
     }
 };
+#endif

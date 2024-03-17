@@ -1,4 +1,5 @@
 #pragma once
+#if DAC == 1220
 
 #include <Arduino.h>
 #include "driver/spi_master.h"
@@ -109,3 +110,4 @@ public:
     }
 };
 
+#endif

@@ -12,3 +12,10 @@ extern void	SetState(CurrentState_t newState);
 extern void runTest(int seconds);
 extern int get_LastTestCount();
 
+struct TestConfig {
+  int period = 10;
+  int test_id = 0;
+  int repeat = 1;
+};
+
+extern QueueHandle_t testQueue;

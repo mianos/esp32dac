@@ -104,19 +104,21 @@ void runTest(int seconds) {
 	currentState = START;
 }
 
+static volatile int seconds = 0;
 static int totalCounts;
 
 enum CurrentState_t checkPCNTOverflow() {
   CurrentState_t newState;
 
+  //Serial.printf("Seconds %d\n", seconds);
   while (xQueueReceive(countQueue, &newState, 0) == pdPASS) { 
-    //' Serial.printf("State changed to: %d\n", newState);
+    Serial.printf("State changed to: %d\n", newState);
 
     if (newState == IDLE) { // Assuming count retrieval makes sense only after IDLE_WAIT
       int16_t count = 0;
       pcnt_get_counter_value(PCNT_UNIT, &count);
       totalCounts = PCNT_H_LIM_VAL * pcnt_overflow_counter + count;
-     // Serial.printf("New count: %d scaled %7.2f\n", totalCounts, (double)totalCounts / (double)period);
+     Serial.printf("New count: %d scaled %7.2f\n", totalCounts, (double)totalCounts / (double)period);
     } 
   }
   return currentState; 
@@ -129,9 +131,10 @@ int get_LastTestCount() {
 int secondsElapsed = 0;
 
 
-extern "C" void IRAM_ATTR one_pps_handler(void* para) {
+void IRAM_ATTR one_pps_handler(void *arg) {
   static BaseType_t xHigherPriorityTaskWoken;
 
+ seconds++;
   switch (currentState) {
     case STOPPED:
       currentState = IDLE;
@@ -166,25 +169,23 @@ extern "C" void IRAM_ATTR one_pps_handler(void* para) {
   }
 }
 
-#define GPIO_INPUT_PIN 15
-#define GPIO_INPUT_PIN_MASK (1ULL<<GPIO_INPUT_PIN)
-#define ESP_INTR_FLAG_DEFAULT 0
+const int PPS_PIN = 15;  // 1PPS pin connected to GPIO15
 
 void initialize_hardware_timer() {
-    // Configure GPIO 15 as input
-    gpio_config_t io_conf = {};
-    io_conf.intr_type = GPIO_INTR_POSEDGE; // Set interrupt on rising edge
-    io_conf.mode = GPIO_MODE_INPUT; // Set as input mode
-    io_conf.pin_bit_mask = GPIO_INPUT_PIN_MASK; // Bitmask for GPIO 15
-    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE; // Disable pull-down
-    io_conf.pull_up_en = GPIO_PULLUP_ENABLE; // Enable pull-up
-    gpio_config(&io_conf);
 
-    // Install GPIO ISR service
-    gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT); // Install ISR service with default flags
+ // Configure the 1PPS pin as input
+  gpio_config_t ppsConfig;
+  ppsConfig.pin_bit_mask = (1ULL << PPS_PIN);
+  ppsConfig.mode = GPIO_MODE_INPUT;
+  ppsConfig.pull_up_en = GPIO_PULLUP_DISABLE;
+  ppsConfig.pull_down_en = GPIO_PULLDOWN_DISABLE;
+  ppsConfig.intr_type = GPIO_INTR_POSEDGE;
+  gpio_config(&ppsConfig);
 
-    // Attach the interrupt service routine
-	gpio_isr_handler_add(static_cast<gpio_num_t>(GPIO_INPUT_PIN), one_pps_handler, NULL); // Cast GPIO number here if necessary
+  // Attach interrupt to 1PPS pin with higher priority
+//  esp_intr_alloc(ETS_GPIO_INTR_SOURCE, ESP_INTR_FLAG_IRAM | ESP_INTR_FLAG_LEVEL1, one_pps_handler, NULL, NULL);
+   gpio_install_isr_service(0);
+	gpio_isr_handler_add(static_cast<gpio_num_t>(PPS_PIN), one_pps_handler, NULL);
 
 }
 

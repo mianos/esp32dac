@@ -1,4 +1,5 @@
 #pragma once
+#if DAC == 8562
 #include "mqtt.h"
 #include "settings.h"
 #include "dac8562.h"
@@ -14,3 +15,4 @@ struct DAC8562Mqtt : public Device {
     void command_handler(std::shared_ptr<GFX> gfx, String& dest, JsonDocument &jpl) override;
     void simple_set(float value);
 };
+#endif

@@ -1,3 +1,4 @@
+#if DAC == 8562
 #include "dac8562if.h"
 
 void DAC8562Mqtt::simple_set(float value) {
@@ -47,3 +48,4 @@ void DAC8562Mqtt::command_handler(std::shared_ptr<GFX> gfx, String& dest, JsonDo
       Serial.printf("Unknown command '%s'\n", dest.c_str());
     }
 }
+#endif

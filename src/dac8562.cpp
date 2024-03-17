@@ -1,3 +1,4 @@
+#if DAC == 8562
 #include "DAC8562.h"
 #include "driver/spi_common.h"
 #include "driver/spi_master.h"
@@ -51,3 +52,4 @@ void DAC8562::initSPI() {
     spi_bus_initialize(HSPI_HOST, &buscfg, 1);
     spi_bus_add_device(HSPI_HOST, &spi_devcfg, &spi);
 }
+#endif

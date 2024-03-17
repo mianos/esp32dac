@@ -6,6 +6,7 @@
 #include <StringSplitter.h>
 
 #include "provision.h"
+#include "gen.h"
 
 void MqttManagedDevices::publish_error(const String& error) {
     JsonDocument doc;
@@ -50,9 +51,36 @@ void MqttManagedDevices::callback(char* topic_str, byte* payload, unsigned int l
         } else if (dest == "settings") {
             auto result = settings->loadFromDocument(jpl);
             // Implement specific settings update logic
-        } else {
-            device->command_handler(gfx, dest, jpl);
-        }
+		} else if (dest == "runtest") {
+			Serial.printf("Run test\n");
+			if (uxQueueSpacesAvailable(testQueue) > 0) {
+				if (jpl.containsKey("period")) {
+					TestConfig testConfig{};
+					testConfig.period = jpl["period"].as<int>();
+
+					if (jpl.containsKey("test_id")) {
+						testConfig.test_id = jpl["test_id"].as<int>();
+					}
+
+					if (jpl.containsKey("repeat")) {
+						testConfig.repeat = jpl["repeat"].as<int>();
+					}
+
+					Serial.printf("Run test - period: %d, test_id: %d, repeat: %d\n", testConfig.period, testConfig.test_id, testConfig.repeat);
+					xQueueSend(testQueue, &testConfig, portMAX_DELAY);
+				} else {
+					Serial.printf("Period missing in runtest\n");
+					// Handle the case when the "period" key is missing
+					// Return an error message or take alternative actions
+					// For example, you can send an error response back to the client
+					publish_error("Period is required for runtest");
+				}
+			} else {
+				// Handle the case when the queue is full
+				// Log an error message or take alternative actions
+				Serial.println("Failed to add test configuration to the queue. Queue is full.");
+			}
+		}
     }
 }
 
@@ -116,10 +144,12 @@ void MqttManagedDevices::handle() {
     client.loop();
 }
 
-void MqttManagedDevices::publish_result(double result) {
+void MqttManagedDevices::publish_result(struct TestConfig& tc) {
 	JsonDocument doc;
 	doc["time"] = DateTime.toISOString();
-	doc["result"] = result;
+	doc["result"] = get_LastTestCount() / (double)tc.period;
+	doc["test_id"] = tc.test_id;
+	doc["repeat"] = tc.repeat;
 	String status_topic = "tele/" + settings->sensorName + "/result";
 	String output;
 	serializeJson(doc, output);

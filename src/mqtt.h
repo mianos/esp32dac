@@ -6,6 +6,7 @@
 
 #include "settings.h"
 #include "gfx.h"
+#include "gen.h"
 
 struct Device {
   virtual void command_handler(std::shared_ptr<GFX> gfx, String& dest, JsonDocument &jpl) = 0;
@@ -37,6 +38,6 @@ struct MqttManagedDevices {
 
     int wcount = 0;
     void wave();
-	void publish_result(double result);
+	void publish_result(struct TestConfig& tc);
 };
 

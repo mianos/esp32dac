@@ -1,3 +1,4 @@
+#if DAC == 4921
 #include "mcp4921.h"
 #include "driver/spi_common.h"
 #include "driver/spi_master.h"
@@ -44,3 +45,4 @@ void MCP4921::initSPI() {
     spi_bus_initialize(HSPI_HOST, &buscfg, 1);
     spi_bus_add_device(HSPI_HOST, &spi_devcfg, &spi);
 }
+#endif
